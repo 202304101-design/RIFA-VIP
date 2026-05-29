@@ -28,25 +28,38 @@ st.markdown("""
     </style>
     """, unsafe_allow_html=True)
 
-# --- BASE DE DATOS LOCAL ---
+# --- GESTIÓN DE DATOS ---
 DB_FILE = "rifa_data.csv"
+COLUMNAS = ["Boleto", "Nombre", "Telefono", "Estado"]
 
 def load_data():
     if os.path.exists(DB_FILE):
-        df = pd.read_csv(DB_FILE)
-        df["Boleto"] = pd.to_numeric(df["Boleto"], errors='coerce')
-        return df
+        try:
+            df = pd.read_csv(DB_FILE)
+            # Verificar si las columnas necesarias existen
+            if not all(col in df.columns for col in COLUMNAS):
+                return pd.DataFrame(columns=COLUMNAS)
+            df["Boleto"] = pd.to_numeric(df["Boleto"], errors='coerce')
+            return df
+        except:
+            return pd.DataFrame(columns=COLUMNAS)
     else:
-        return pd.DataFrame(columns=["Boleto", "Nombre", "Telefono", "Estado"])
+        return pd.DataFrame(columns=COLUMNAS)
 
+# Cargar datos
 df = load_data()
 
 # --- LÓGICA DE INTERFAZ ---
 st.title("🎟️ Mi Control de Rifa")
 
-# Resumen rápido
-total_v = len(df[df["Estado"] == "Pagado"]) if not df.empty else 0
-total_p = len(df[df["Estado"] == "Pendiente"]) if not df.empty else 0
+# Cálculo de métricas (aquí ya no dará KeyError)
+if not df.empty and "Estado" in df.columns:
+    total_v = len(df[df["Estado"] == "Pagado"])
+    total_p = len(df[df["Estado"] == "Pendiente"])
+else:
+    total_v = 0
+    total_p = 0
+
 total_v_p = total_v + total_p
 st.progress(total_v_p / 1000)
 st.write(f"📊 **{total_v}** Pagados | **{total_p}** Pendientes | **{1000 - total_v_p}** Libres")
@@ -75,10 +88,10 @@ if menu == "Registrar":
                 })
                 df = pd.concat([df, nuevos], ignore_index=True)
                 df.to_csv(DB_FILE, index=False)
-                st.success("✅ Guardado en el teléfono")
+                st.success("✅ ¡Guardado con éxito!")
                 st.rerun()
             else:
-                st.warning("Completa nombre y números")
+                st.warning("Completa el nombre y elige al menos un boleto.")
 
 elif menu == "Gestionar":
     st.subheader("🔍 Editar o Eliminar")
@@ -103,16 +116,19 @@ elif menu == "Gestionar":
                         df.at[index, "Telefono"] = n_tel
                         df.at[index, "Estado"] = n_est
                         df.to_csv(DB_FILE, index=False)
+                        st.success("Actualizado")
                         st.rerun()
                     if c2.form_submit_button("🗑️ Eliminar"):
                         df = df.drop(index)
                         df.to_csv(DB_FILE, index=False)
+                        st.warning("Eliminado")
                         st.rerun()
     else:
-        st.info("No hay registros aún")
+        st.info("No hay registros aún.")
 
 elif menu == "Mapa":
     st.subheader("📍 Mapa de Boletos")
+    # Colorear según estado
     color_map = dict(zip(df.Boleto, df.Estado)) if not df.empty else {}
     grid_html = '<div class="ticket-grid">'
     for i in range(1, 1001):
@@ -122,15 +138,14 @@ elif menu == "Mapa":
     st.markdown(grid_html + '</div>', unsafe_allow_html=True)
 
 elif menu == "Respaldo":
-    st.subheader("💾 Descargar Datos")
-    st.write("Usa este botón para guardar una copia de tu lista en tu teléfono.")
+    st.subheader("💾 Respaldar Datos")
     if not df.empty:
         csv = df.to_csv(index=False).encode('utf-8')
         st.download_button(
-            label="📥 Descargar Excel (CSV)",
+            label="📥 Descargar Archivo para Excel",
             data=csv,
             file_name='rifa_backup.csv',
             mime='text/csv',
         )
     else:
-        st.warning("No hay datos para descargar.")
+        st.info("La lista está vacía.")
