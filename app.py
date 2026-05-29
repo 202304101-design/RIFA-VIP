@@ -2,20 +2,41 @@ import streamlit as st
 import pandas as pd
 import os
 
-# Configuración estilo iOS
-st.set_page_config(page_title="Rifa Pro 1000", page_icon="🎟️")
+# Configuración que se adapta al sistema (Claro/Oscuro)
+st.set_page_config(page_title="Rifa Pro", page_icon="📱", layout="centered")
 
-# Estilo para que se vea premium
+# CSS para que parezca App Nativa
 st.markdown("""
     <style>
-    .stApp { background-color: #F2F2F7; }
-    .ticket-box {
-        padding: 10px;
-        border-radius: 10px;
+    /* Estética de bordes redondeados y fuentes limpias */
+    .stApp { border-radius: 15px; }
+    
+    /* Botones grandes para dedos */
+    .stButton>button {
+        height: 3em;
+        border-radius: 12px;
+        font-weight: bold;
+        text-transform: uppercase;
+        letter-spacing: 1px;
+    }
+    
+    /* Cuadrícula de boletos compacta para móvil */
+    .ticket-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fill, minmax(45px, 1fr));
+        gap: 5px;
+        margin-top: 10px;
+    }
+    
+    .t-node {
+        padding: 10px 5px;
+        border-radius: 8px;
         text-align: center;
-        margin: 5px;
+        font-size: 0.8rem;
         font-weight: bold;
     }
+    
+    /* Colores modo claro/oscuro se manejan por el sistema de Streamlit */
     .sold { background-color: #FF3B30; color: white; }
     .available { background-color: #34C759; color: white; }
     </style>
@@ -28,81 +49,65 @@ if not os.path.exists(DB_FILE):
     df.to_csv(DB_FILE, index=False)
 
 df = pd.read_csv(DB_FILE)
-df["Boleto"] = df["Boleto"].astype(int) # Asegurar que sea número
+df["Boleto"] = df["Boleto"].astype(int)
 
-# --- LÓGICA DE NEGOCIO ---
+# --- LÓGICA ---
 total_boletos = 1000
 vendidos = len(df)
 porcentaje = (vendidos / total_boletos)
 
-# --- INTERFAZ ---
-st.title("🎟️ Control de Rifa 1000")
+# --- INTERFAZ MÓVIL ---
+st.title("🎟️ Mi Rifa")
 
-# 1. Porcentaje de progreso
-st.subheader(f"Progreso de Venta: {vendidos} de {total_boletos}")
-st.progress(porcentaje)
-st.write(f"**{porcentaje*100:.1f}% vendido**")
+# Card de Resumen
+with st.container():
+    col1, col2 = st.columns(2)
+    col1.metric("Vendidos", f"{vendidos}")
+    col2.metric("Disponibles", f"{total_boletos - vendidos}")
+    st.progress(porcentaje)
+    st.caption(f"Progreso actual: {porcentaje*100:.1f}%")
 
-# 2. Formulario de Registro
-with st.expander("📝 Registrar Nueva Venta", expanded=True):
-    with st.form("registro_form"):
-        nombre = st.text_input("Nombre del Cliente").strip()
-        tel = st.text_input("Teléfono").strip()
+# Formulario optimizado
+with st.expander("➕ NUEVO REGISTRO", expanded=False):
+    with st.form("registro"):
+        nombre = st.text_input("👤 Nombre")
+        tel = st.text_input("📞 Teléfono")
         
-        # Selección de boletos disponibles
-        boletos_ocupados = df["Boleto"].tolist()
-        boletos_disponibles = [i for i in range(1, 1001) if i not in boletos_ocupados]
+        ocupados = df["Boleto"].tolist()
+        disponibles = [i for i in range(1, 1001) if i not in ocupados]
         
-        numeros_elegidos = st.multiselect("Selecciona los números de boleto", boletos_disponibles)
+        # Multiselect más amigable
+        seleccion = st.multiselect("🔢 Elige números:", disponibles)
         
-        submit = st.form_submit_button("Confirmar Registro")
-        
-        if submit:
-            if not nombre or not numeros_elegidos:
-                st.error("Por favor ingresa el nombre y al menos un número de boleto.")
-            else:
-                try:
-                    # Crear nuevos registros
-                    nuevos_datos = pd.DataFrame({
-                        "Boleto": numeros_elegidos,
-                        "Nombre": [nombre] * len(numeros_elegidos),
-                        "Teléfono": [tel] * len(numeros_elegidos)
-                    })
-                    df = pd.concat([df, nuevos_datos], ignore_index=True)
-                    df.to_csv(DB_FILE, index=False)
-                    st.success(f"¡Registrado! Boletos: {numeros_elegidos}")
-                    st.rerun()
-                except Exception as e:
-                    st.error(f"Hubo un error al guardar. Intenta de nuevo.")
+        if st.form_submit_button("GUARDAR REGISTRO"):
+            if nombre and seleccion:
+                nuevos = pd.DataFrame({
+                    "Boleto": seleccion,
+                    "Nombre": [nombre] * len(seleccion),
+                    "Teléfono": [tel] * len(seleccion)
+                })
+                df = pd.concat([df, nuevos], ignore_index=True)
+                df.to_csv(DB_FILE, index=False)
+                st.success("¡Guardado!")
+                st.rerun()
 
-# 3. Pestañas para organizar la información
-tab1, tab2 = st.tabs(["📋 Lista de Ventas", "🔢 Mapa de Boletos (1-1000)"])
+# Pestañas inferiores (estilo barra de navegación)
+menu = st.radio("Ver:", ["Lista", "Mapa 1-1000"], horizontal=True)
 
-with tab1:
-    st.subheader("Ventas Registradas")
+if menu == "Lista":
+    search = st.text_input("🔍 Buscar nombre...")
     if not df.empty:
-        # Buscador por nombre
-        busqueda = st.text_input("Buscar por nombre...")
-        df_mostrar = df[df["Nombre"].str.contains(busqueda, case=False)] if busqueda else df
-        st.dataframe(df_mostrar.sort_values("Boleto"), use_container_width=True)
+        filtered_df = df[df["Nombre"].str.contains(search, case=False)] if search else df
+        st.dataframe(filtered_df.sort_values("Boleto", ascending=False), use_container_width=True)
     else:
-        st.info("No hay ventas aún.")
+        st.info("No hay ventas.")
 
-with tab2:
-    st.subheader("Estado de todos los números")
-    col_v, col_d = st.columns(2)
-    col_v.write("🔴 Vendido")
-    col_d.write("🟢 Disponible")
-    
-    # Crear una cuadrícula visual de los 1000 boletos
-    # Nota: Para no saturar la pantalla, mostramos una lista resumida o botones
-    filas = 100
-    for i in range(0, 1000, 10): # Grupos de 10 para que se vea limpio
-        cols = st.columns(10)
-        for j in range(10):
-            num = i + j + 1
-            if num <= 1000:
-                if num in boletos_ocupados:
-                    cols[j].markdown(f'<div class="ticket-box sold">{num}</div>', unsafe_allow_html=True)
-                else:
-                    cols[j].markdown(f'<div class="ticket-box available">{num}</div>', unsafe_allow_html=True)
+else:
+    st.write("### Estado de Boletos")
+    # Generar el mapa visual
+    ticket_html = '<div class="ticket-grid">'
+    for i in range(1, 1001):
+        clase = "sold" if i in ocupados else "available"
+        ticket_html += f'<div class="t-node {clase}">{i}</div>'
+    ticket_html += '</div>'
+    st.markdown(ticket_html, unsafe_allow_html=True)
